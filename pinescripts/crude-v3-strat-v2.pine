@@ -1,0 +1,56 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © frederickpek
+
+//@version=5
+strategy(title='CRUDE V3 Strategy', shorttitle='CRUDE V3', precision=2, overlay=true)
+
+smaValue = input.int(70, title='SMA Length', step=1)
+distSMA = input.float(0.013, title='distSMA', step=0.001)
+
+sma = ta.sma(close, smaValue)
+gaps = sma * (1 + distSMA)
+gapb = sma / (1 + distSMA)
+
+var bool inBuyPosition = false
+var bool inSellPosition = false
+
+BUY = ta.crossover(close[1], sma) and close[1] > open[1] and high[0] > high[1] and close[0] > open[0]
+SELL = ta.crossunder(low[1], sma) and close[1] < open[1] and low[0] < low[1] and close[0] < open[0]
+CBTP = inBuyPosition and (high > gaps)
+CBSL = inBuyPosition and (low < gapb)
+CSTP = inSellPosition and (low < gapb)
+CSSL = inSellPosition and (high > gaps)
+
+if (BUY)
+    inBuyPosition := true
+    inSellPosition := false
+    strategy.close("Buy")
+    strategy.close("Sell")
+    strategy.entry("Buy", strategy.long, qty=1000)
+else if (SELL)
+    inBuyPosition := false
+    inSellPosition := true
+    strategy.close("Buy")
+    strategy.close("Sell")
+    strategy.entry("Sell", strategy.short, qty=1000)
+else if (CBTP or CBSL or CSTP or CSSL)
+    inBuyPosition := false
+    inSellPosition := false
+    if (CBTP or CBSL)
+        strategy.close("Buy")
+    else
+        strategy.close("Sell")
+
+
+plotshape(SELL, title='SELL', style=shape.labeldown, color=color.new(color.red, 30), text='S', textcolor=color.new(color.black, 30))
+plotshape(BUY, title='BUY', style=shape.labelup, color=color.new(color.aqua, 30), text='B', textcolor=color.new(color.black, 30), location=location.belowbar)
+plotshape(CBTP, title='CBTP', style=shape.labeldown, color=color.new(color.orange, 0), text='CBTP', textcolor=color.black)
+plotshape(CSTP, title='CSTP', style=shape.labelup, color=color.new(color.orange, 0), text='CBTP', textcolor=color.black, location=location.belowbar)
+plotshape(CBSL, title='CBSL', style=shape.labelup, color=#f1c7c7, text='CBSL', textcolor=color.black, location=location.belowbar)
+plotshape(CSSL, title='CSSL', style=shape.labeldown, color=#f1c7c7, text='CSSL', textcolor=color.black)
+
+plot(sma, title='SMA', color=color.white, linewidth=1)
+plot(gaps, title='gaps', color=color.new(color.green, 30), linewidth=1)
+plot(gapb, title='gapb', color=color.new(color.red, 30), linewidth=1)
+plot(gapsHalf, title='gapsHalf', color=color.new(color.green, 60), linewidth=1)
+plot(gapbHalf, title='gapbHalf', color=color.new(color.red, 60), linewidth=1)

@@ -1,0 +1,92 @@
+indicator(title='CRUDE BUY/SELL V2', shorttitle='CRUDE V2', precision=2, overlay=true)
+
+Rsi_value = input.int(14, title='RSI Length', step=1)
+hl = input.int(80, title='Higher Value of RSI', step=1)
+ll = input.int(20, title='Lower value of RSI', step=1)
+rs = ta.rsi(close, Rsi_value)
+
+sma_value = input.int(70, title='SMA Length', step=1)
+sma1 = ta.sma(close, sma_value)
+
+dist_SMA = 0.022
+
+gaps = sma1 * (1 + dist_SMA)  // Gap between price and SMA for Sell
+gapb = sma1 / (1 + dist_SMA)  // Gap between price and SMA for Buy
+
+// Additional lines for stop-loss and take-profit
+stopLossBuy = sma1 * (1 + dist_SMA / 2)
+stopLossSell = sma1 / (1 + dist_SMA / 2)
+
+BUY = ta.crossover(close[1], sma1) and close[1] > open[1] and high[0] > high[1] and close[0] > open[0]
+SELL = ta.crossunder(low[1], sma1) and close[1] < open[1] and low[0] < low[1] and close[0] < open[0]
+
+// Variables to track the state of positions
+var bool inBuyPosition = false
+var bool inSellPosition = false
+var float entryPrice = na
+
+// Flags to track if halving position has been triggered
+var bool halvedBuy = false
+var bool halvedSell = false
+
+// Entry conditions
+if (BUY)
+    if (not inBuyPosition)
+        entryPrice := close
+        halvedBuy := false  // Reset halving flag for new BUY position
+    inBuyPosition := true
+    inSellPosition := false
+
+if (SELL)
+    if (not inSellPosition)
+        entryPrice := close
+        halvedSell := false  // Reset halving flag for new SELL position
+    inSellPosition := true
+    inBuyPosition := false
+
+// Close conditions for BUY position
+CLOSE_BUY_TP = inBuyPosition and (high > gaps)
+CLOSE_BUY_SL = inBuyPosition and (low < stopLossBuy)
+CLOSE_BUY_HALF_TP = inBuyPosition and not halvedBuy and (high > stopLossSell)
+
+// Close conditions for SELL position
+CLOSE_SELL_TP = inSellPosition and (low < gapb)
+CLOSE_SELL_SL = inSellPosition and (high > stopLossSell)
+CLOSE_SELL_HALF_TP = inSellPosition and not halvedSell and (low < stopLossBuy)
+
+// Update position state based on close conditions
+if (CLOSE_BUY_TP or CLOSE_BUY_SL)
+    inBuyPosition := false
+if (CLOSE_SELL_TP or CLOSE_SELL_SL)
+    inSellPosition := false
+
+// Set halving flags to true once the signal is triggered
+if (CLOSE_BUY_HALF_TP)
+    halvedBuy := true
+if (CLOSE_SELL_HALF_TP)
+    halvedSell := true
+
+// Plot buy/sell signals
+plotshape(SELL, title='SELL', style=shape.labeldown, color=color.new(color.red, 30), text='S', textcolor=color.new(color.black, 30))
+plotshape(BUY, title='BUY', style=shape.labelup, color=color.new(color.aqua, 30), text='B', textcolor=color.new(color.black, 30), location=location.belowbar)
+
+// Plot signals to close positions with new labels
+plotshape(CLOSE_BUY_TP, title='Close Buy TP', style=shape.labeldown, color=color.new(color.orange, 0), text='CBTP', textcolor=color.new(color.black, 0))
+plotshape(CLOSE_BUY_SL, title='Close Buy SL', style=shape.labeldown, color=color.new(color.orange, 0), text='CBSL', textcolor=color.new(color.black, 0))
+plotshape(CLOSE_BUY_HALF_TP, title='Close Buy Half TP', style=shape.labeldown, color=color.new(color.blue, 0), text='CBTP-Half', textcolor=color.new(color.black, 0))
+
+plotshape(CLOSE_SELL_TP, title='Close Sell TP', style=shape.labelup, color=color.new(color.lime, 0), text='CSTP', textcolor=color.new(color.black, 0), location=location.belowbar)
+plotshape(CLOSE_SELL_SL, title='Close Sell SL', style=shape.labelup, color=color.new(color.lime, 0), text='CSSL', textcolor=color.new(color.black, 0), location=location.belowbar)
+plotshape(CLOSE_SELL_HALF_TP, title='Close Sell Half TP', style=shape.labeldown, color=color.new(color.purple, 0), text='CSTP-Half', textcolor=color.new(color.black, 0))
+
+// Always plot gaps and gapb lines
+plot(gaps, title='gaps', color=color.new(color.lime, 30), linewidth=2)
+plot(gapb, title='gapb', color=color.new(color.red, 30), linewidth=2)
+
+// Plot stop-loss and take-profit lines
+plot(stopLossBuy, title='SMA - dist/2', color=color.new(color.red, 60), linewidth=1)
+plot(stopLossSell, title='SMA + dist/2', color=color.new(color.lime, 60), linewidth=1)
+
+// Plot bar colors based on position
+barcolor(BUY ? color.new(color.green, 0) : SELL ? color.new(color.maroon, 30) : na)
+plot(sma1, title='SMA', color=color.white, linewidth=1)

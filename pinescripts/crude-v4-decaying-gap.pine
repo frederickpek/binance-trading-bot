@@ -1,0 +1,88 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © frederickpek
+
+//@version=5
+indicator(title='CRUDE V4 with Decaying Gaps', shorttitle='CRUDE V4 Decaying Gaps', precision=2, overlay=true)
+
+smaValue = input.int(70, title='SMA Length', step=1)
+distSMA = input.float(0.013, title='distSMA', step=0.001)
+
+decay_buffer = input.int(20, title='Decay Buffer', step=1)
+decay_length = input.int(50, title='Decay Length', step=1)  // Length of the exponential decay
+decay_limit = input.float(0.5, title='Decay Limit', step=0.01)
+
+
+// Calculate SMA and gap levels
+sma = ta.sma(close, smaValue)
+gaps = sma * (1 + distSMA)
+gapb = sma / (1 + distSMA)
+
+// Flags for position tracking
+var bool inBuyPosition = false
+var bool inSellPosition = false
+
+// Buy and Sell signals
+BUY = ta.crossover(close[1], sma) and close[1] > open[1] and high[0] > high[1] and close[0] > open[0]
+SELL = ta.crossunder(close[1], sma) and close[1] < open[1] and low[0] < low[1] and close[0] < open[0]
+
+// Close Buy/Close Sell signals
+CBTP = inBuyPosition and (high > gaps)
+CBSL = inBuyPosition and (low < gapb)
+CSTP = inSellPosition and (low < gapb)
+CSSL = inSellPosition and (high > gaps)
+
+// Variables to track candle count since entry
+var float decay_factor = na
+var int entry_candle_count = 0
+
+// Position state transitions
+if (BUY)
+    inBuyPosition := true
+    inSellPosition := false
+    entry_candle_count := 0  // Reset the candle count when entering a buy
+else if (SELL)
+    inBuyPosition := false
+    inSellPosition := true
+    entry_candle_count := 0  // Reset the candle count when entering a sell
+else if (CBTP or CBSL or CSTP or CSSL)
+    inBuyPosition := false
+    inSellPosition := false
+
+// Increment candle count when in a position
+if (inBuyPosition or inSellPosition)
+    entry_candle_count := entry_candle_count + 1
+
+// Calculate the decay factor, grows from 0 to 1 over decay_length candles
+
+fn_smooth_decay_factor(candle_count) =>
+    if candle_count <= decay_buffer
+        0
+    else if candle_count - decay_buffer >= decay_length
+        decay_limit
+    else
+        x = (candle_count - decay_buffer) / decay_length
+        (3.0 * x * x - 2.0 * x * x * x) * decay_limit
+
+decay_factor := fn_smooth_decay_factor(entry_candle_count)
+
+// Decaying gap calculation: initially it's equal to gaps/gapb and decays towards sma over time
+decaying_gaps = sma * (1 + distSMA * (1 - decay_factor))
+decaying_gapb = sma / (1 + distSMA * (1 - decay_factor))
+
+
+// Plot signals
+plotshape(SELL, title='SELL', style=shape.labeldown, color=color.new(color.red, 30), text='S', textcolor=color.new(color.black, 30))
+plotshape(BUY, title='BUY', style=shape.labelup, color=color.new(color.aqua, 30), text='B', textcolor=color.new(color.black, 30), location=location.belowbar)
+plotshape(CBTP, title='CBTP', style=shape.labeldown, color=color.new(color.orange, 0), text='CBTP', textcolor=color.black)
+plotshape(CSTP, title='CSTP', style=shape.labelup, color=color.new(color.orange, 0), text='CSTP', textcolor=color.black, location=location.belowbar)
+plotshape(CBSL, title='CBSL', style=shape.labelup, color=#f1c7c7, text='CBSL', textcolor=color.black, location=location.belowbar)
+plotshape(CSSL, title='CSSL', style=shape.labeldown, color=#f1c7c7, text='CSSL', textcolor=color.black)
+
+// Plot SMA and gap levels
+plot(sma, title='SMA', color=color.white, linewidth=1)
+plot(gaps, title='gaps', color=color.new(color.green, 30), linewidth=1)
+plot(gapb, title='gapb', color=color.new(color.red, 30), linewidth=1)
+
+// Plot decaying gaps if in a position
+plot(inBuyPosition or inSellPosition ? decaying_gaps : na, title="Decaying gaps", color=color.new(color.teal, 0), linewidth=2, style=plot.style_linebr)
+plot(inBuyPosition or inSellPosition ? decaying_gapb : na, title="Decaying gapb", color=color.new(color.teal, 0), linewidth=2, style=plot.style_linebr)
